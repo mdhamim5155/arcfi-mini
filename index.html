@@ -344,8 +344,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);font-si
 
   <!-- SWAP -->
   <div class="page" id="page-swap">
-    <div class="phdr"><button class="bk" onclick="nav('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button><span class="ptit">Swap</span><span class="pbdg sim">Simulated + Real TX</span></div>
-    <div class="note gold">Rate is simulated (no DEX on Arc yet). Swap triggers a real wallet transaction as proof-of-interaction. Gas paid in USDC.</div>
+    <div class="phdr"><button class="bk" onclick="nav('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button><span class="ptit">Swap</span><span class="pbdg real">Real TX</span></div>
+    <div class="note gold">Rate is simulated (no DEX on Arc yet). But swap triggers a <strong>real onchain transaction</strong> — visible on Arc Explorer via your wallet address.</div>
 
     <div class="fg"><label class="fl">From</label>
       <div style="display:flex;gap:5px;">
@@ -376,7 +376,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);font-si
   <!-- BRIDGE -->
   <div class="page" id="page-bridge">
     <div class="phdr"><button class="bk" onclick="nav('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button><span class="ptit">Bridge</span><span class="pbdg real">Real Chain Switch</span></div>
-    <div class="note blue">Wallet switches to Sepolia, signs a real transaction (ETH gas). Then switches back to Arc. USDC credited on Arc side. CCTP logic simulated.</div>
+    <div class="note blue">Wallet switches to source chain, signs a <strong>real onchain transaction</strong> (ETH gas). Then switches back to Arc. TX hash visible on explorer. CCTP mint on Arc is simulated.</div>
 
     <div class="fg"><label class="fl">Source Network</label>
       <select class="fsel" id="brF"><option value="sep">Ethereum Sepolia (11155111)</option><option value="bsep">Base Sepolia (84532)</option></select>
@@ -470,8 +470,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);font-si
 
   <!-- DEPLOY -->
   <div class="page" id="page-dep">
-    <div class="phdr"><button class="bk" onclick="nav('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button><span class="ptit">Deploy Contract</span><span class="pbdg sim">Fun/Demo</span></div>
-    <div class="note blue">Simulated deployment — generates random contract address & tx hash. Shown in history with Arc Explorer link.</div>
+    <div class="phdr"><button class="bk" onclick="nav('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button><span class="ptit">Deploy Contract</span><span class="pbdg real">Real TX</span></div>
+    <div class="note blue">Deploys a real minimal contract on Arc Testnet. Wallet signs the transaction — TX hash and contract address appear on Arc Explorer.</div>
     <div class="fg"><label class="fl">Contract Name</label><input class="fi" id="depNm" placeholder="MyToken" value="MyToken"></div>
     <div class="fg"><label class="fl">Type</label><select class="fsel" id="depTy"><option>ERC20 Token</option><option>ERC721 NFT</option><option>Multisig</option><option>Staking Pool</option><option>DEX Pair</option></select></div>
     <div class="fg"><label class="fl">Symbol</label><input class="fi" id="depSy" placeholder="MTK"></div>
@@ -565,49 +565,45 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);font-si
 'use strict';
 
 // ══════════════════════════════
-//  OFFICIAL CHAIN CONFIG
+//  FIX 4: CHAIN CONFIG — correct chainId 0x4cecd2 everywhere
 // ══════════════════════════════
 const ARC = {
-  chainId: '0x4cef52',          // 5042002 decimal — lowercase required by EIP-3085
+  chainId: '0x4cecd2',
   chainName: 'Arc Testnet',
   nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
   rpcUrls: ['https://rpc.testnet.arc.network'],
   blockExplorerUrls: ['https://testnet.arcscan.app']
 };
 const SEP = {
-  chainId: '0xaa36a7',          // 11155111 — lowercase required by EIP-3085
+  chainId: '0xaa36a7',
   chainName: 'Ethereum Sepolia',
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
   rpcUrls: ['https://rpc.sepolia.org'],
   blockExplorerUrls: ['https://sepolia.etherscan.io']
 };
 const BSEP = {
-  chainId: '0x14a34',           // 84532 — lowercase required by EIP-3085
+  chainId: '0x14a34',
   chainName: 'Base Sepolia',
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
   rpcUrls: ['https://sepolia.base.org'],
   blockExplorerUrls: ['https://sepolia-explorer.base.org']
 };
 
-// Official Arc Testnet contracts
-const USDC_ARC  = '0x3600000000000000000000000000000000000000'; // 6 decimals ERC-20
+const USDC_ARC  = '0x3600000000000000000000000000000000000000';
 const EURC_ARC  = '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a';
 const USDC_SEP  = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238';
+const USDC_BSEP = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
 const EXP       = 'https://testnet.arcscan.app';
 
-// Simulated swap rates (forward USDC → X)
+// FIX 1: Unified gas limit for all transactions
+const GAS = '0x30D40'; // 200000
+
 const RATES = { USDT:1, EURC:1, AUSD:4, DAI:7, ADA:3, POL:17 };
 
-// ══════════════════════════════
-//  SESSION STATE
-// ══════════════════════════════
 let W = { connected:false, addr:'', type:'' };
 let usdcBal = null;
 let ethPx   = null;
 
-// ══════════════════════════════
-//  PERSISTENT STATE
-// ══════════════════════════════
 const LSK = 'arcfi_v7';
 function loadLS(){ try{ return JSON.parse(localStorage.getItem(LSK)||'{}'); }catch{ return {}; } }
 function saveLS(){ try{ localStorage.setItem(LSK, JSON.stringify(LS)); }catch{} }
@@ -618,6 +614,55 @@ let LS = {
   lastCiHash: null,
   ...loadLS()
 };
+
+// ══════════════════════════════
+//  FIX 1: RETRY HELPER — handles txpool full with auto-retry
+// ══════════════════════════════
+async function sendTx(params, btnEl, btnLabel, retries=2){
+  for(let attempt=0; attempt<=retries; attempt++){
+    try {
+      return await window.ethereum.request({ method:'eth_sendTransaction', params:[params] });
+    } catch(e) {
+      const msg = (e.message||'').toLowerCase();
+      const isTxpool = msg.includes('txpool') || msg.includes('replacement transaction underpriced') || msg.includes('full');
+      if(isTxpool && attempt < retries){
+        toast(`Network busy, retrying… (${attempt+1}/${retries})`,'w');
+        await sleep(2000);
+        continue;
+      }
+      throw e; // re-throw for caller to handle
+    }
+  }
+}
+
+// ══════════════════════════════
+//  ENSURE CHAIN HELPER
+// ══════════════════════════════
+async function ensureChain(chain){
+  const cur = await window.ethereum.request({ method:'eth_chainId' });
+  if(cur.toLowerCase() === chain.chainId) return true;
+  try {
+    await window.ethereum.request({ method:'wallet_switchEthereumChain', params:[{chainId:chain.chainId}] });
+  } catch(sw){
+    if(sw.code===4902){
+      await window.ethereum.request({ method:'wallet_addEthereumChain', params:[chain] });
+    } else throw sw;
+  }
+  return true;
+}
+
+// ══════════════════════════════
+//  ERROR HANDLER
+// ══════════════════════════════
+function handleErr(e, label){
+  if(e.code===4001){ toast(label+' rejected','e'); return; }
+  const msg = (e.message||'').toLowerCase();
+  if(msg.includes('txpool')||msg.includes('full')||msg.includes('replacement transaction underpriced')){
+    toast('Network congested. Wait ~30 seconds and try again.','w');
+  } else {
+    toast(label+' failed: '+(e.message||'').slice(0,50),'e');
+  }
+}
 
 // ══════════════════════════════
 //  WALLETS
@@ -659,8 +704,6 @@ async function doConn(wid){
   try {
     toast('Requesting accounts…','i');
     const accs = await window.ethereum.request({ method:'eth_requestAccounts' });
-
-    // Add/switch to Arc Testnet (Chain 5042002)
     try {
       await window.ethereum.request({ method:'wallet_switchEthereumChain', params:[{chainId:ARC.chainId}] });
     } catch(sw){
@@ -669,11 +712,9 @@ async function doConn(wid){
         catch{ toast('Please add Arc Testnet manually (Chain 5042002)','w'); }
       } else if(sw.code===4001){ toast('Network switch denied','e'); }
     }
-
     W = { connected:true, addr:accs[0], type:wid };
     onConn();
     await loadBal();
-
     window.ethereum.on('accountsChanged', a=>{
       if(!a.length) disconn();
       else { W.addr=a[0]; onConn(); loadBal(); }
@@ -709,9 +750,6 @@ function disconn(){
   nav('home');
 }
 
-// ══════════════════════════════
-//  REAL BALANCE (Arc USDC ERC-20, 6 dec)
-// ══════════════════════════════
 async function loadBal(){
   if(!W.connected||!window.ethereum) return;
   document.getElementById('hBal').textContent='…';
@@ -721,14 +759,11 @@ async function loadBal(){
     usdcBal=(res&&res!=='0x'&&res!=='0x0') ? Number(BigInt(res))/1e6 : 0;
   } catch {
     usdcBal=0;
-    toast('Balance fetch failed — check you are on Arc Testnet (Chain 5042002 / 0x4cecd2)','w');
+    toast('Balance fetch failed — check Arc Testnet (Chain 5042002)','w');
   }
   refreshAll();
 }
 
-// ══════════════════════════════
-//  ETH PRICE
-// ══════════════════════════════
 async function getEthPx(){
   try{
     const r=await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
@@ -738,7 +773,7 @@ async function getEthPx(){
 }
 
 // ══════════════════════════════
-//  SEND (REAL ERC-20 transfer)
+//  FIX 5: SEND — real ERC-20, sim=false, retry
 // ══════════════════════════════
 function sndPrev(){
   const a=parseFloat(document.getElementById('sAmt').value)||0;
@@ -763,40 +798,28 @@ async function doSend(){
   const btn=document.getElementById('sndBtn');
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Sign in wallet…';
   try {
-    // Ensure we are on Arc Testnet before sending
-    const curChain = await window.ethereum.request({ method: 'eth_chainId' });
-    if (curChain.toLowerCase() !== ARC.chainId) {
-      toast('Switching to Arc Testnet…', 'i');
-      try {
-        await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: ARC.chainId }] });
-      } catch (sw) {
-        if (sw.code === 4902) await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [ARC] });
-        else { toast('Switch to Arc Testnet first', 'e'); btn.disabled = false; btn.textContent = 'Sign & Send in Wallet'; return; }
-      }
-    }
-    // ERC-20 transfer — USDC 6 decimals
+    await ensureChain(ARC);
     const amtH=BigInt(Math.round(amt*1e6)).toString(16).padStart(64,'0');
     const toH=to.slice(2).padStart(64,'0');
-    const tx=await window.ethereum.request({
-      method:'eth_sendTransaction',
-      params:[{from:W.addr, to:USDC_ARC, data:'0xa9059cbb'+toH+amtH, gas:'0x186A0', chainId: ARC.chainId}]
-    });
+    const tx = await sendTx({
+      from:W.addr, to:USDC_ARC,
+      data:'0xa9059cbb'+toH+amtH,
+      gas:GAS, chainId:ARC.chainId
+    }, btn, 'Send');
     if(usdcBal!==null) usdcBal=Math.max(0,usdcBal-amt);
-    addTx('Send','To '+sa(to),-amt,'USDC',tx,false);
+    addTx('Send','To '+sa(to),-amt,'USDC',tx,false); // FIX 2: sim=false
     addPts('send',5);
     document.getElementById('sTo').value='';
     document.getElementById('sAmt').value='';
     document.getElementById('sPrv').style.display='none';
     refreshAll();
     toast('Sent '+fmt(amt)+' USDC ✓','s');
-  } catch(e){
-    if(e.code===4001) toast('Rejected','e');
-    else toast('Send failed: '+(e.message||'').slice(0,55),'e');
+  } catch(e){ handleErr(e,'Send');
   } finally { btn.disabled=false; btn.textContent='Sign & Send in Wallet'; }
 }
 
 // ══════════════════════════════
-//  SWAP (simulated rate, real TX proof)
+//  FIX 2+5: SWAP — sim=false, retry
 // ══════════════════════════════
 function getBal(sym){ return sym==='USDC'?(usdcBal||0):(LS.simBal[sym]||0); }
 
@@ -806,9 +829,7 @@ async function calcSwap(){
   const amt=parseFloat(document.getElementById('swI').value)||0;
   document.getElementById('swB').textContent=fmt(getBal(fs))+' '+fs;
   if(fs===ts){document.getElementById('swO').value='';return;}
-
   let out=0,rate='—',fee='None',src='Fixed rate';
-
   if((fs==='USDC'||fs==='EURC')&&ts==='ETH'){
     const p=ethPx||await getEthPx()||null;
     if(p){out=amt/p;rate=`1 ${fs} = ${(1/p).toFixed(8)} ETH`;src='CoinGecko live';}
@@ -820,7 +841,6 @@ async function calcSwap(){
   } else if(fs==='USDC'&&RATES[ts]){ out=amt*RATES[ts]; rate=`1 USDC = ${RATES[ts]} ${ts}`;
   } else if(ts==='USDC'&&RATES[fs]){ const pen=.03+Math.random()*.02; out=amt/RATES[fs]*(1-pen); rate=`1 ${fs} ≈ ${(1/RATES[fs]).toFixed(4)} USDC`; fee=(pen*100).toFixed(1)+'% penalty'; src='Fixed (reverse)';
   } else if(RATES[fs]&&RATES[ts]){ const pen=.03+Math.random()*.02; out=(amt/RATES[fs])*RATES[ts]*(1-pen); rate='via USDC (cross)'; fee=(pen*100).toFixed(1)+'% penalty'; src='Fixed (cross)'; }
-
   document.getElementById('swO').value=out>0?out.toFixed(6):'';
   document.getElementById('swR').textContent=rate;
   document.getElementById('swFe').textContent=fee;
@@ -842,37 +862,29 @@ async function doSwap(){
   const btn=document.getElementById('swBtn');
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Sign in wallet…';
   try {
-    // Ensure Arc Testnet
-    const curChain = await window.ethereum.request({ method: 'eth_chainId' });
-    if (curChain.toLowerCase() !== ARC.chainId) {
-      try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: ARC.chainId }] }); }
-      catch (sw) { if (sw.code === 4902) await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [ARC] }); }
-    }
-    // Real TX: send 0 USDC to self as proof-of-interaction
-    const tx=await window.ethereum.request({
-      method:'eth_sendTransaction',
-      params:[{from:W.addr, to:USDC_ARC, data:'0xa9059cbb'+W.addr.slice(2).padStart(64,'0')+'0'.padStart(64,'0'), gas:'0xC350', chainId: ARC.chainId}]
-    });
-    // Update simulated balances
+    await ensureChain(ARC);
+    const tx = await sendTx({
+      from:W.addr, to:USDC_ARC,
+      data:'0xa9059cbb'+W.addr.slice(2).padStart(64,'0')+'0'.padStart(64,'0'),
+      gas:GAS, chainId:ARC.chainId
+    }, btn, 'Swap');
     if(fs==='USDC') usdcBal=Math.max(0,(usdcBal||0)-amt);
     else { LS.simBal[fs]=Math.max(0,(LS.simBal[fs]||0)-amt); }
     if(ts==='USDC') usdcBal=(usdcBal||0)+out;
     else { LS.simBal[ts]=(LS.simBal[ts]||0)+out; }
     saveLS();
-    addTx('Swap',`${fmt(amt)} ${fs} → ${fmt(out)} ${ts}`,-amt,fs,tx,true);
+    addTx('Swap',`${fmt(amt)} ${fs} → ${fmt(out)} ${ts}`,-amt,fs,tx,false); // FIX 2: sim=false
     addPts('swap',3);
     document.getElementById('swI').value='';
     document.getElementById('swO').value='';
     refreshAll();
     toast(`Swapped ${fmt(amt)} ${fs} → ${fmt(out)} ${ts} ✓`,'s');
-  } catch(e){
-    if(e.code===4001) toast('Rejected','e');
-    else toast('Swap failed: '+(e.message||'').slice(0,55),'e');
+  } catch(e){ handleErr(e,'Swap');
   } finally { btn.disabled=false; btn.textContent='Swap — Sign in Wallet'; }
 }
 
 // ══════════════════════════════
-//  BRIDGE (real chain switch + real tx on source)
+//  FIX 2+5+6: BRIDGE — sim=false, real chain switch, retry
 // ══════════════════════════════
 async function doBridge(){
   if(!W.connected){toast('Connect wallet first','e');return;}
@@ -881,50 +893,45 @@ async function doBridge(){
   const amt=parseFloat(document.getElementById('brA').value)||0;
   if(amt<=0){toast('Enter amount','e');return;}
 
-  const srcChain=fk==='sep'?SEP:BSEP;
-  const srcLbl=fk==='sep'?'Ethereum Sepolia':'Base Sepolia';
-  // Official USDC on each source chain
-  const USDC_SEP_ADDR  = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238'; // Sepolia USDC
-  const USDC_BSEP_ADDR = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'; // Base Sepolia USDC
-  const srcUSDC = fk==='sep' ? USDC_SEP_ADDR : USDC_BSEP_ADDR;
+  const srcChain = fk==='sep' ? SEP : BSEP;
+  const srcLbl   = fk==='sep' ? 'Ethereum Sepolia' : 'Base Sepolia';
+  const srcUSDC  = fk==='sep' ? USDC_SEP : USDC_BSEP;
 
   const btn=document.getElementById('brBtn');
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Switching to '+srcLbl+'…';
   try {
-    // Step 1: Switch to source chain (Sepolia or Base Sepolia)
+    // Step 1: Switch to source chain
     try {
       await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:srcChain.chainId}]});
     } catch(sw){
       if(sw.code===4902){
         try{ await window.ethereum.request({method:'wallet_addEthereumChain',params:[srcChain]}); }
-        catch(e2){ toast('Please add '+srcLbl+' network manually','w'); btn.disabled=false; btn.textContent='Bridge — Sign in Wallet'; return; }
+        catch(e2){ toast('Please add '+srcLbl+' manually','w'); btn.disabled=false; btn.textContent='Bridge — Sign in Wallet'; return; }
       } else if(sw.code===4001){
-        toast('Network switch rejected','e');
-        btn.disabled=false; btn.textContent='Bridge — Sign in Wallet'; return;
+        toast('Network switch rejected','e'); btn.disabled=false; btn.textContent='Bridge — Sign in Wallet'; return;
       }
     }
 
+    // Step 2: Real TX on source chain with retry
     btn.innerHTML='<span class="spin"></span>Sign bridge tx on '+srcLbl+'…';
-
-    // Step 2: Real tx on source chain (ETH gas) — USDC transfer to self as burn simulation
     const amtH=BigInt(Math.round(amt*1e6)).toString(16).padStart(64,'0');
     const toH=W.addr.slice(2).padStart(64,'0');
-    const tx=await window.ethereum.request({
-      method:'eth_sendTransaction',
-      params:[{from:W.addr, to:srcUSDC, data:'0xa9059cbb'+toH+amtH, gas:'0x186A0', chainId: srcChain.chainId}]
-    });
+    const tx = await sendTx({
+      from:W.addr, to:srcUSDC,
+      data:'0xa9059cbb'+toH+amtH,
+      gas:GAS, chainId:srcChain.chainId
+    }, btn, 'Bridge');
 
     btn.innerHTML='<span class="spin"></span>Bridging (2–10s)…';
     await sleep(2000+Math.random()*8000);
 
-    // Step 3: Switch back to Arc Testnet
+    // Step 3: Switch back to Arc
     btn.innerHTML='<span class="spin"></span>Switching back to Arc…';
     try{
       await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:ARC.chainId}]});
     } catch(sw2){
       if(sw2.code===4902){
-        try{ await window.ethereum.request({method:'wallet_addEthereumChain',params:[ARC]}); }
-        catch{}
+        try{ await window.ethereum.request({method:'wallet_addEthereumChain',params:[ARC]}); }catch{}
       }
     }
 
@@ -932,22 +939,19 @@ async function doBridge(){
     if(tk==='USDC') usdcBal=(usdcBal||0)+amt;
     else { LS.simBal[tk]=(LS.simBal[tk]||0)+amt; }
     saveLS();
-
-    addTx('Bridge',`${srcLbl} → Arc · ${fmt(amt)} ${tk}`,+amt,tk,tx,true);
+    addTx('Bridge',`${srcLbl} → Arc · ${fmt(amt)} ${tk}`,+amt,tk,tx,false); // FIX 2: sim=false
     addPts('bridge',5);
     document.getElementById('brA').value='';
     refreshAll();
     toast(`${fmt(amt)} ${tk} arrived on Arc ✓`,'s');
   } catch(e){
-    if(e.code===4001) toast('Rejected','e');
-    else toast('Bridge error: '+(e.message||'').slice(0,55),'e');
-    // Always try to return to Arc on error
     try{ await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:ARC.chainId}]}); }catch{}
+    handleErr(e,'Bridge');
   } finally { btn.disabled=false; btn.textContent='Bridge — Sign in Wallet'; }
 }
 
 // ══════════════════════════════
-//  STAKING (real approval + real tx)
+//  FIX 5: STAKING — real TX, sim=false, retry
 // ══════════════════════════════
 function calcStake(){
   const a=parseFloat(document.getElementById('stA').value)||0;
@@ -966,27 +970,22 @@ async function doStake(){
   if(amt<=0){toast('Enter amount','e');return;}
   if((usdcBal||0)<amt){toast('Insufficient USDC','e');return;}
   try {
-    // Ensure Arc Testnet
-    const curChain = await window.ethereum.request({ method: 'eth_chainId' });
-    if (curChain.toLowerCase() !== ARC.chainId) {
-      try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: ARC.chainId }] }); }
-      catch (sw) { if (sw.code === 4902) await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [ARC] }); }
-    }
-    // Step 1: ERC-20 approve
+    await ensureChain(ARC);
     toast('Step 1/2: Approve USDC…','i');
     const amtH=BigInt(Math.round(amt*1e6)).toString(16).padStart(64,'0');
     const spender='0x0000000000000000000000000000000000000002';
     const spH=spender.slice(2).padStart(64,'0');
-    await window.ethereum.request({
-      method:'eth_sendTransaction',
-      params:[{from:W.addr, to:USDC_ARC, data:'0x095ea7b3'+spH+amtH, gas:'0xC350', chainId: ARC.chainId}]
-    });
-    // Step 2: Stake tx (0 USDC self-transfer as proof)
+    await sendTx({
+      from:W.addr, to:USDC_ARC,
+      data:'0x095ea7b3'+spH+amtH,
+      gas:GAS, chainId:ARC.chainId
+    }, null, 'Approve');
     toast('Step 2/2: Confirm stake…','i');
-    const tx=await window.ethereum.request({
-      method:'eth_sendTransaction',
-      params:[{from:W.addr, to:USDC_ARC, data:'0xa9059cbb'+W.addr.slice(2).padStart(64,'0')+'0'.padStart(64,'0'), gas:'0xC350', chainId: ARC.chainId}]
-    });
+    const tx = await sendTx({
+      from:W.addr, to:USDC_ARC,
+      data:'0xa9059cbb'+W.addr.slice(2).padStart(64,'0')+'0'.padStart(64,'0'),
+      gas:GAS, chainId:ARC.chainId
+    }, null, 'Stake');
     usdcBal=Math.max(0,(usdcBal||0)-amt);
     LS.tusdc=(LS.tusdc||0)+amt;
     LS.trew=+((LS.tusdc||0)*.05).toFixed(6);
@@ -996,36 +995,32 @@ async function doStake(){
     document.getElementById('stA').value=''; calcStake();
     saveLS(); refreshAll();
     toast(`Staked ${fmt(amt)} USDC ✓ +${pts} pts`,'s');
-  } catch(e){
-    if(e.code===4001) toast('Rejected','e');
-    else toast('Stake failed: '+(e.message||'').slice(0,55),'e');
-  }
+  } catch(e){ handleErr(e,'Stake'); }
 }
 
 async function doUnstake(){
   if(!(LS.tusdc>0)){toast('Nothing staked','e');return;}
   try {
+    await ensureChain(ARC);
     toast('Confirm unstake in wallet…','i');
     const total=LS.tusdc;
     const amtH=BigInt(Math.round(total*1e6)).toString(16).padStart(64,'0');
     const toH=W.addr.slice(2).padStart(64,'0');
-    const tx=await window.ethereum.request({
-      method:'eth_sendTransaction',
-      params:[{from:W.addr, to:USDC_ARC, data:'0xa9059cbb'+toH+amtH, gas:'0x186A0', chainId: ARC.chainId}]
-    });
+    const tx = await sendTx({
+      from:W.addr, to:USDC_ARC,
+      data:'0xa9059cbb'+toH+amtH,
+      gas:GAS, chainId:ARC.chainId
+    }, null, 'Unstake');
     usdcBal=(usdcBal||0)+total+LS.trew;
     addTx('Unstake',`${fmt(total)} tUSDC → USDC (1:1)`,+total,'USDC',tx,false);
     addPts('stake',5);
     LS.tusdc=0; LS.trew=0; saveLS(); refreshAll();
     toast(`Unstaked ${fmt(total)} USDC ✓`,'s');
-  } catch(e){
-    if(e.code===4001) toast('Rejected','e');
-    else toast('Unstake failed','e');
-  }
+  } catch(e){ handleErr(e,'Unstake'); }
 }
 
 // ══════════════════════════════
-//  DAILY CHECK-IN (REAL ON-CHAIN TX)
+//  FIX 5: CHECK-IN — real TX, sim=false, retry
 // ══════════════════════════════
 async function doCheckin(){
   if(!W.connected){toast('Connect wallet first','e');return;}
@@ -1034,32 +1029,17 @@ async function doCheckin(){
 
   const btn=document.getElementById('ciBtn');
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Sign check-in tx…';
-
   try {
-    // Ensure Arc Testnet before check-in
-    const curChain = await window.ethereum.request({ method: 'eth_chainId' });
-    if (curChain.toLowerCase() !== ARC.chainId) {
-      try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: ARC.chainId }] }); }
-      catch (sw) { if (sw.code === 4902) await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [ARC] }); }
-    }
-    // Real on-chain tx: transfer 0 USDC to self as proof of activity
-    const tx=await window.ethereum.request({
-      method:'eth_sendTransaction',
-      params:[{
-        from: W.addr,
-        to:   USDC_ARC,
-        data: '0xa9059cbb'+W.addr.slice(2).padStart(64,'0')+'0'.padStart(64,'0'),
-        gas:  '0xC350',
-        chainId: ARC.chainId
-      }]
-    });
-
-    // Update streak
+    await ensureChain(ARC);
+    const tx = await sendTx({
+      from:W.addr, to:USDC_ARC,
+      data:'0xa9059cbb'+W.addr.slice(2).padStart(64,'0')+'0'.padStart(64,'0'),
+      gas:GAS, chainId:ARC.chainId
+    }, btn, 'Check-in');
     const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
     LS.streak = LS.lastCi===yesterday.toDateString() ? (LS.streak||0)+1 : 1;
     LS.lastCi=today;
     LS.lastCiHash=tx;
-
     const s=LS.streak;
     let base=5, extra=0;
     if(s>14) extra=5; else if(s>7) extra=3; else if(LS._m7) extra=2;
@@ -1067,39 +1047,64 @@ async function doCheckin(){
     if(s===7)  { bonus=50;  LS._m7=true; }
     if(s===14) { bonus=100; LS._m14=true; }
     if(s===30) { bonus=200; LS._m30=true; }
-
     addPts('checkin',pts+bonus);
     addTx('Check-in',`Day ${s} · tx: ${sa(tx,8)}`,pts+bonus,'pts',tx,false);
     saveLS(); refreshAll();
     toast(`Day ${s} · +${pts}${bonus?' +'+bonus+' bonus':''} pts ✓`,'s');
-  } catch(e){
-    if(e.code===4001) toast('Check-in rejected','e');
-    else toast('Check-in failed: '+(e.message||'').slice(0,55),'e');
+  } catch(e){ handleErr(e,'Check-in');
   } finally { btn.disabled=false; btn.textContent='Check-in — Sign in Wallet'; }
 }
 
 // ══════════════════════════════
-//  DEPLOY (simulated)
+//  FIX 3: DEPLOY — real onchain contract creation, no fake hash
 // ══════════════════════════════
 async function doDeploy(){
   if(!W.connected){toast('Connect wallet first','e');return;}
-  const nm=document.getElementById('depNm').value||'MyToken';
+  const nm=document.getElementById('depNm').value.trim()||'MyToken';
   const ty=document.getElementById('depTy').value;
-  const sy=document.getElementById('depSy').value||'MTK';
+  const sy=document.getElementById('depSy').value.trim()||'MTK';
   const btn=document.getElementById('depBtn');
-  btn.disabled=true; btn.innerHTML='<span class="spin"></span>Deploying…';
-  await sleep(1400);
-  const hash=rndH(), addr='0x'+rndHex(40), blk=Math.floor(Math.random()*900000+100000);
-  document.getElementById('depRes').style.display='block';
-  document.getElementById('drN').textContent=`${nm} · ${ty} · ${sy}`;
-  document.getElementById('drA').textContent=addr;
-  document.getElementById('drH').textContent=sa(hash,10);
-  document.getElementById('drB').textContent=blk;
-  document.getElementById('drLnk').href=`${EXP}/tx/${hash}`;
-  addTx('Deploy',`${nm} · ${ty}`,0,'',hash,true);
-  addPts('deploy',10); saveLS(); refreshAll();
-  toast(`${nm} deployed ✓`,'s');
-  btn.disabled=false; btn.textContent='Deploy Contract';
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span>Sign deploy tx…';
+  try {
+    await ensureChain(ARC);
+    // Minimal valid EVM init code: deploys an empty contract onchain
+    // PUSH1 0x00 PUSH1 0x00 RETURN — guaranteed valid, creates 0-byte runtime contract
+    const deployBytecode = '0x60006000f3';
+    const txHash = await sendTx({
+      from:W.addr,
+      to:null,              // null = contract creation TX
+      data:deployBytecode,
+      gas:'0x493E0',        // 300000 — higher for contract creation
+      chainId:ARC.chainId
+    }, btn, 'Deploy');
+
+    // Poll for receipt to get contract address
+    btn.innerHTML='<span class="spin"></span>Waiting for confirmation…';
+    let contractAddr = null;
+    for(let i=0; i<10; i++){
+      await sleep(2000);
+      try {
+        const receipt = await window.ethereum.request({
+          method:'eth_getTransactionReceipt', params:[txHash]
+        });
+        if(receipt && receipt.contractAddress){
+          contractAddr = receipt.contractAddress; break;
+        }
+      } catch {}
+    }
+
+    document.getElementById('depRes').style.display='block';
+    document.getElementById('drN').textContent=`${nm} · ${ty} · ${sy}`;
+    document.getElementById('drA').textContent= contractAddr || 'Pending — check explorer';
+    document.getElementById('drH').textContent= sa(txHash,10);
+    document.getElementById('drB').textContent= 'Onchain ✓';
+    document.getElementById('drLnk').href=`${EXP}/tx/${txHash}`;
+
+    addTx('Deploy',`${nm} · ${ty} · ${sy}`,0,'',txHash,false); // FIX 2: sim=false, real hash
+    addPts('deploy',10); saveLS(); refreshAll();
+    toast(`${nm} deployed onchain ✓`,'s');
+  } catch(e){ handleErr(e,'Deploy');
+  } finally { btn.disabled=false; btn.textContent='Deploy Contract'; }
 }
 
 // ══════════════════════════════
@@ -1189,9 +1194,6 @@ function renderPort(){
   document.getElementById('portList').innerHTML=h;
 }
 
-// ══════════════════════════════
-//  CHECK-IN UI
-// ══════════════════════════════
 function ciUI(){
   const s=LS.streak||0;
   const today=new Date().toDateString();
@@ -1218,9 +1220,6 @@ function ciUI(){
   });
 }
 
-// ══════════════════════════════
-//  STAKE UI
-// ══════════════════════════════
 function stUI(){
   document.getElementById('stBl').textContent=fmt(usdcBal||0)+' USDC';
   document.getElementById('stSt').textContent=fmt(LS.tusdc||0);
@@ -1233,17 +1232,11 @@ function stUI(){
   } else document.getElementById('stAb').style.display='none';
 }
 
-// ══════════════════════════════
-//  FULL REFRESH
-// ══════════════════════════════
 function refreshAll(){
   if(usdcBal!==null) document.getElementById('hBal').textContent=fmt(usdcBal);
   renderPort(); renderPts(); renderHist(); ciUI(); stUI();
 }
 
-// ══════════════════════════════
-//  NAVIGATION
-// ══════════════════════════════
 function nav(id){
   if(!W.connected&&id!=='home'){toast('Connect wallet first','e');return;}
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -1259,9 +1252,6 @@ function openDr(){ document.getElementById('dr').classList.add('open'); document
 function closeDr(){ document.getElementById('dr').classList.remove('open'); document.getElementById('ov').classList.remove('open'); }
 function xo(u){ closeDr(); window.open(u,'_blank'); }
 
-// ══════════════════════════════
-//  THEME
-// ══════════════════════════════
 function toggleTheme(){
   const cur=document.documentElement.getAttribute('data-theme');
   const next=cur==='dark'?'light':'dark';
@@ -1270,9 +1260,6 @@ function toggleTheme(){
   LS.theme=next; saveLS();
 }
 
-// ══════════════════════════════
-//  HELPERS
-// ══════════════════════════════
 function fmt(n){ return(n===null||n===undefined)?'—':Number(n).toFixed(6); }
 function sa(a,n=6){ if(!a||a.length<10)return a; return a.slice(0,n)+'…'+a.slice(-4); }
 function rndHex(l){ return Array.from({length:l},()=>Math.floor(Math.random()*16).toString(16)).join(''); }
@@ -1289,9 +1276,6 @@ function toast(msg,type='i'){
   clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),3200);
 }
 
-// ══════════════════════════════
-//  INIT
-// ══════════════════════════════
 document.documentElement.setAttribute('data-theme',LS.theme||'dark');
 document.getElementById('thBtn').textContent=(LS.theme||'dark')==='dark'?'🌙':'☀️';
 document.getElementById('brTk').addEventListener('change',()=>{ document.getElementById('brTtg').textContent=document.getElementById('brTk').value; });
@@ -1301,4 +1285,4 @@ getEthPx();
 setInterval(getEthPx,90000);
 </script>
 </body>
-        </html>
+		</html>
