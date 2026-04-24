@@ -550,7 +550,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);font-si
   <div class="modal">
     <div class="mhnd"></div>
     <div class="mtit">Connect Wallet</div>
-    <div class="msub">Connects to Arc Testnet · Chain 5042002 · USDC gas</div>
+    <div class="msub">Connects to Arc Testnet · Chain 5042002 (0x4cecd2) · USDC gas</div>
     <div id="wLst"></div>
     <div style="margin-top:10px;text-align:center;font-size:.62rem;color:var(--t3);">
       No wallet? <a href="https://metamask.io" target="_blank" style="color:var(--blue);">MetaMask</a> · <a href="https://rabby.io" target="_blank" style="color:var(--blue);">Rabby</a> · <a href="https://zerion.io" target="_blank" style="color:var(--blue);">Zerion</a>
@@ -568,21 +568,21 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);font-si
 //  OFFICIAL CHAIN CONFIG
 // ══════════════════════════════
 const ARC = {
-  chainId: '0x4CECD2',          // 5042002 decimal
+  chainId: '0x4cecd2',          // 5042002 decimal — lowercase required by EIP-3085
   chainName: 'Arc Testnet',
   nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
   rpcUrls: ['https://rpc.testnet.arc.network'],
   blockExplorerUrls: ['https://testnet.arcscan.app']
 };
 const SEP = {
-  chainId: '0xAA36A7',          // 11155111
+  chainId: '0xaa36a7',          // 11155111 — lowercase required by EIP-3085
   chainName: 'Ethereum Sepolia',
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
   rpcUrls: ['https://rpc.sepolia.org'],
   blockExplorerUrls: ['https://sepolia.etherscan.io']
 };
 const BSEP = {
-  chainId: '0x14A34',           // 84532
+  chainId: '0x14a34',           // 84532 — lowercase required by EIP-3085
   chainName: 'Base Sepolia',
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
   rpcUrls: ['https://sepolia.base.org'],
@@ -721,7 +721,7 @@ async function loadBal(){
     usdcBal=(res&&res!=='0x'&&res!=='0x0') ? Number(BigInt(res))/1e6 : 0;
   } catch {
     usdcBal=0;
-    toast('Balance fetch failed — check you are on Arc Testnet (Chain 5042002)','w');
+    toast('Balance fetch failed — check you are on Arc Testnet (Chain 5042002 / 0x4cecd2)','w');
   }
   refreshAll();
 }
@@ -763,12 +763,23 @@ async function doSend(){
   const btn=document.getElementById('sndBtn');
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Sign in wallet…';
   try {
+    // Ensure we are on Arc Testnet before sending
+    const curChain = await window.ethereum.request({ method: 'eth_chainId' });
+    if (curChain.toLowerCase() !== ARC.chainId) {
+      toast('Switching to Arc Testnet…', 'i');
+      try {
+        await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: ARC.chainId }] });
+      } catch (sw) {
+        if (sw.code === 4902) await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [ARC] });
+        else { toast('Switch to Arc Testnet first', 'e'); btn.disabled = false; btn.textContent = 'Sign & Send in Wallet'; return; }
+      }
+    }
     // ERC-20 transfer — USDC 6 decimals
     const amtH=BigInt(Math.round(amt*1e6)).toString(16).padStart(64,'0');
     const toH=to.slice(2).padStart(64,'0');
     const tx=await window.ethereum.request({
       method:'eth_sendTransaction',
-      params:[{from:W.addr, to:USDC_ARC, data:'0xa9059cbb'+toH+amtH, gas:'0x186A0'}]
+      params:[{from:W.addr, to:USDC_ARC, data:'0xa9059cbb'+toH+amtH, gas:'0x186A0', chainId: ARC.chainId}]
     });
     if(usdcBal!==null) usdcBal=Math.max(0,usdcBal-amt);
     addTx('Send','To '+sa(to),-amt,'USDC',tx,false);
@@ -831,10 +842,16 @@ async function doSwap(){
   const btn=document.getElementById('swBtn');
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Sign in wallet…';
   try {
+    // Ensure Arc Testnet
+    const curChain = await window.ethereum.request({ method: 'eth_chainId' });
+    if (curChain.toLowerCase() !== ARC.chainId) {
+      try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: ARC.chainId }] }); }
+      catch (sw) { if (sw.code === 4902) await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [ARC] }); }
+    }
     // Real TX: send 0 USDC to self as proof-of-interaction
     const tx=await window.ethereum.request({
       method:'eth_sendTransaction',
-      params:[{from:W.addr, to:USDC_ARC, data:'0xa9059cbb'+W.addr.slice(2).padStart(64,'0')+'0'.padStart(64,'0'), gas:'0xC350'}]
+      params:[{from:W.addr, to:USDC_ARC, data:'0xa9059cbb'+W.addr.slice(2).padStart(64,'0')+'0'.padStart(64,'0'), gas:'0xC350', chainId: ARC.chainId}]
     });
     // Update simulated balances
     if(fs==='USDC') usdcBal=Math.max(0,(usdcBal||0)-amt);
@@ -866,36 +883,52 @@ async function doBridge(){
 
   const srcChain=fk==='sep'?SEP:BSEP;
   const srcLbl=fk==='sep'?'Ethereum Sepolia':'Base Sepolia';
+  // Official USDC on each source chain
+  const USDC_SEP_ADDR  = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238'; // Sepolia USDC
+  const USDC_BSEP_ADDR = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'; // Base Sepolia USDC
+  const srcUSDC = fk==='sep' ? USDC_SEP_ADDR : USDC_BSEP_ADDR;
 
   const btn=document.getElementById('brBtn');
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Switching to '+srcLbl+'…';
   try {
-    // Switch to source chain
+    // Step 1: Switch to source chain (Sepolia or Base Sepolia)
     try {
       await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:srcChain.chainId}]});
     } catch(sw){
-      if(sw.code===4902) await window.ethereum.request({method:'wallet_addEthereumChain',params:[srcChain]});
-      else if(sw.code===4001){toast('Network switch rejected','e');return;}
+      if(sw.code===4902){
+        try{ await window.ethereum.request({method:'wallet_addEthereumChain',params:[srcChain]}); }
+        catch(e2){ toast('Please add '+srcLbl+' network manually','w'); btn.disabled=false; btn.textContent='Bridge — Sign in Wallet'; return; }
+      } else if(sw.code===4001){
+        toast('Network switch rejected','e');
+        btn.disabled=false; btn.textContent='Bridge — Sign in Wallet'; return;
+      }
     }
 
     btn.innerHTML='<span class="spin"></span>Sign bridge tx on '+srcLbl+'…';
 
-    // Real tx on source chain (ETH gas) — USDC transfer to self as burn simulation
+    // Step 2: Real tx on source chain (ETH gas) — USDC transfer to self as burn simulation
     const amtH=BigInt(Math.round(amt*1e6)).toString(16).padStart(64,'0');
     const toH=W.addr.slice(2).padStart(64,'0');
-    const srcUSDC=fk==='sep'?USDC_SEP:USDC_SEP;
     const tx=await window.ethereum.request({
       method:'eth_sendTransaction',
-      params:[{from:W.addr, to:srcUSDC, data:'0xa9059cbb'+toH+amtH, gas:'0x186A0'}]
+      params:[{from:W.addr, to:srcUSDC, data:'0xa9059cbb'+toH+amtH, gas:'0x186A0', chainId: srcChain.chainId}]
     });
 
-    btn.innerHTML='<span class="spin"></span>Waiting (2–10s)…';
+    btn.innerHTML='<span class="spin"></span>Bridging (2–10s)…';
     await sleep(2000+Math.random()*8000);
 
-    // Switch back to Arc
-    try{ await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:ARC.chainId}]}); }catch{}
+    // Step 3: Switch back to Arc Testnet
+    btn.innerHTML='<span class="spin"></span>Switching back to Arc…';
+    try{
+      await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:ARC.chainId}]});
+    } catch(sw2){
+      if(sw2.code===4902){
+        try{ await window.ethereum.request({method:'wallet_addEthereumChain',params:[ARC]}); }
+        catch{}
+      }
+    }
 
-    // Credit on Arc side
+    // Step 4: Credit on Arc side
     if(tk==='USDC') usdcBal=(usdcBal||0)+amt;
     else { LS.simBal[tk]=(LS.simBal[tk]||0)+amt; }
     saveLS();
@@ -908,6 +941,7 @@ async function doBridge(){
   } catch(e){
     if(e.code===4001) toast('Rejected','e');
     else toast('Bridge error: '+(e.message||'').slice(0,55),'e');
+    // Always try to return to Arc on error
     try{ await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:ARC.chainId}]}); }catch{}
   } finally { btn.disabled=false; btn.textContent='Bridge — Sign in Wallet'; }
 }
@@ -932,6 +966,12 @@ async function doStake(){
   if(amt<=0){toast('Enter amount','e');return;}
   if((usdcBal||0)<amt){toast('Insufficient USDC','e');return;}
   try {
+    // Ensure Arc Testnet
+    const curChain = await window.ethereum.request({ method: 'eth_chainId' });
+    if (curChain.toLowerCase() !== ARC.chainId) {
+      try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: ARC.chainId }] }); }
+      catch (sw) { if (sw.code === 4902) await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [ARC] }); }
+    }
     // Step 1: ERC-20 approve
     toast('Step 1/2: Approve USDC…','i');
     const amtH=BigInt(Math.round(amt*1e6)).toString(16).padStart(64,'0');
@@ -939,13 +979,13 @@ async function doStake(){
     const spH=spender.slice(2).padStart(64,'0');
     await window.ethereum.request({
       method:'eth_sendTransaction',
-      params:[{from:W.addr, to:USDC_ARC, data:'0x095ea7b3'+spH+amtH, gas:'0xC350'}]
+      params:[{from:W.addr, to:USDC_ARC, data:'0x095ea7b3'+spH+amtH, gas:'0xC350', chainId: ARC.chainId}]
     });
     // Step 2: Stake tx (0 USDC self-transfer as proof)
     toast('Step 2/2: Confirm stake…','i');
     const tx=await window.ethereum.request({
       method:'eth_sendTransaction',
-      params:[{from:W.addr, to:USDC_ARC, data:'0xa9059cbb'+W.addr.slice(2).padStart(64,'0')+'0'.padStart(64,'0'), gas:'0xC350'}]
+      params:[{from:W.addr, to:USDC_ARC, data:'0xa9059cbb'+W.addr.slice(2).padStart(64,'0')+'0'.padStart(64,'0'), gas:'0xC350', chainId: ARC.chainId}]
     });
     usdcBal=Math.max(0,(usdcBal||0)-amt);
     LS.tusdc=(LS.tusdc||0)+amt;
@@ -971,7 +1011,7 @@ async function doUnstake(){
     const toH=W.addr.slice(2).padStart(64,'0');
     const tx=await window.ethereum.request({
       method:'eth_sendTransaction',
-      params:[{from:W.addr, to:USDC_ARC, data:'0xa9059cbb'+toH+amtH, gas:'0x186A0'}]
+      params:[{from:W.addr, to:USDC_ARC, data:'0xa9059cbb'+toH+amtH, gas:'0x186A0', chainId: ARC.chainId}]
     });
     usdcBal=(usdcBal||0)+total+LS.trew;
     addTx('Unstake',`${fmt(total)} tUSDC → USDC (1:1)`,+total,'USDC',tx,false);
@@ -996,6 +1036,12 @@ async function doCheckin(){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Sign check-in tx…';
 
   try {
+    // Ensure Arc Testnet before check-in
+    const curChain = await window.ethereum.request({ method: 'eth_chainId' });
+    if (curChain.toLowerCase() !== ARC.chainId) {
+      try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: ARC.chainId }] }); }
+      catch (sw) { if (sw.code === 4902) await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [ARC] }); }
+    }
     // Real on-chain tx: transfer 0 USDC to self as proof of activity
     const tx=await window.ethereum.request({
       method:'eth_sendTransaction',
@@ -1003,7 +1049,8 @@ async function doCheckin(){
         from: W.addr,
         to:   USDC_ARC,
         data: '0xa9059cbb'+W.addr.slice(2).padStart(64,'0')+'0'.padStart(64,'0'),
-        gas:  '0xC350'
+        gas:  '0xC350',
+        chainId: ARC.chainId
       }]
     });
 
@@ -1254,4 +1301,4 @@ getEthPx();
 setInterval(getEthPx,90000);
 </script>
 </body>
-</html>
+  </html>
